@@ -7,7 +7,7 @@ import Data.Time.Format as TimeFormat
 import qualified Text.Regex as RegExp
 import Data.Time.Clock (UTCTime(..))
 import Data.Time.LocalTime
-import System.IO (openFile, FilePath, hPutStr, hGetContents, hClose, IOMode(AppendMode,ReadMode))
+import System.IO (openFile, FilePath, Handle, hPutStr, hGetContents, hClose, IOMode(AppendMode,ReadMode))
 
 inputFileName = "SorcererAndTheWhiteSnake_Input.info.srt"
 outputFileName = "SorcererAndTheWhiteSnake_Output.info.srt"
@@ -19,23 +19,24 @@ main = do
     blocks <- (myRegexSplit "\n\n") `fmap` readFile inputFileFullPath
     putStrLn $ "Number of blocks: " ++ (show . length) blocks
 
-    shiftEachBlock blocks
+    outputFileFullPath <- filePathInCurrentDir outputFileName
+    outputFileHandle <- openFile outputFileFullPath AppendMode
+    shiftEachBlock blocks outputFileHandle
 
 filePathInCurrentDir :: String -> IO String
 filePathInCurrentDir fileName = do
     currDirPath <- getCurrentDirectory
     return $ currDirPath ++ (pathSeparator : []) ++ fileName
 
-
 -- ## Sample block:
 -- 1
 -- 00:00:42,491 --> 00:00:45,507
 -- Master, where did this blizzard come from?
-shiftEachBlock :: [String] -> IO ()
+shiftEachBlock :: [String] -> Handle -> IO ()
 
-shiftEachBlock [] = do putStrLn "Processing done!"
+shiftEachBlock [] outputFileHandle = hClose outputFileHandle >> putStrLn "Processing done!"
 
-shiftEachBlock (firstBlock : remainingBlocks) =
+shiftEachBlock (firstBlock : remainingBlocks) outputFileHandle =
     let
       (blockNum : blockTime : blockTextArray) = lines firstBlock
       blockTimes = myRegexSplit " --> " blockTime
@@ -46,13 +47,12 @@ shiftEachBlock (firstBlock : remainingBlocks) =
 
       newBlockTime = (newBeginTime ++ " --> " ++ newEndTime)
     in
-      do outputFilePath <- filePathInCurrentDir outputFileName
-         fileHandle <- openFile outputFilePath AppendMode
-         hPutStr fileHandle (blockNum ++ "\n")
-         hPutStr fileHandle (newBlockTime ++ "\n")
-         hPutStr fileHandle $ unwords blockTextArray ++ "\n\n"
-         hClose fileHandle
-         shiftEachBlock remainingBlocks
+      do
+         hPutStr outputFileHandle (blockNum ++ "\n")
+         hPutStr outputFileHandle (newBlockTime ++ "\n")
+         hPutStr outputFileHandle $ unwords blockTextArray ++ "\n\n"
+
+         shiftEachBlock remainingBlocks outputFileHandle
 
 -- 00:06:56,064
 transformTime :: String -> String
@@ -66,6 +66,4 @@ transformTime aTimeOfBlock =
     in newPart1 ++ "," ++ part2
 
 myRegexSplit :: String -> String -> [String]
-myRegexSplit regExp theString =
-    let result = RegExp.splitRegex (RegExp.mkRegex regExp) theString
-    in filter (not . null) result
+myRegexSplit regExp theString = filter (not . null) (RegExp.splitRegex (RegExp.mkRegex regExp) theString)
